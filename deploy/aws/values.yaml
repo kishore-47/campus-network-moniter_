@@ -1,0 +1,52 @@
+replicaCount: 3
+
+backend:
+  image:
+    repository: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/campus-network-monitor-backend
+    tag: latest
+  service:
+    port: 5000
+    type: ClusterIP
+  scaling:
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilization: 70
+
+frontend:
+  image:
+    repository: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/campus-network-monitor-frontend
+    tag: latest
+  service:
+    port: 80
+    type: ClusterIP
+  scaling:
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilization: 70
+
+ingress:
+  enabled: true
+  className: alb
+  hosts:
+    - host: monitor.example.com
+      paths:
+        - /
+
+resources:
+  backend:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  frontend:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+podDisruptionBudget:
+  minAvailable: 1

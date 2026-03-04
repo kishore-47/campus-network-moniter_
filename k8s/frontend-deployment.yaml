@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: campus-frontend
+  labels:
+    app: campus-frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: campus-frontend
+  template:
+    metadata:
+      labels:
+        app: campus-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: campus-network-monitor-frontend:latest
+          ports:
+            - containerPort: 80
+          env:
+            - name: REACT_APP_API_BASE
+              value: "http://campus-backend:5000/api"

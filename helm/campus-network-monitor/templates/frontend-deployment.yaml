@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cnm.fullname" . }}-frontend
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "cnm.fullname" . }}-frontend
+  template:
+    metadata:
+      labels:
+        app: {{ include "cnm.fullname" . }}-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
+          ports:
+            - containerPort: {{ .Values.frontend.service.port }}
+          env:
+            - name: REACT_APP_API_BASE
+              value: "http://{{ include "cnm.fullname" . }}-backend:{{ .Values.backend.service.port }}/api"

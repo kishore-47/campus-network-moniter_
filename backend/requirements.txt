@@ -1,0 +1,10 @@
+Flask==3.0.0
+Flask-CORS==4.0.0
+Flask-JWT-Extended==4.6.0
+bcrypt==4.1.2
+python-dotenv==1.0.0
+pysnmp==4.4.12
+twilio==8.11.0
+sendgrid==6.11.0
+requests==2.31.0
+prometheus-client==0.19.0

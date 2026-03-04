@@ -1,0 +1,65 @@
+replicaCount: 3
+
+backend:
+  image:
+    repository: campusmonitoracr.azurecr.io/campus-network-monitor-backend
+    tag: latest
+  service:
+    port: 5000
+    type: LoadBalancer
+  scaling:
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilization: 70
+
+frontend:
+  image:
+    repository: campusmonitoracr.azurecr.io/campus-network-monitor-frontend
+    tag: latest
+  service:
+    port: 80
+    type: LoadBalancer
+  scaling:
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilization: 70
+
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: monitor.example.com
+      paths:
+        - /
+
+resources:
+  backend:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  frontend:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+podDisruptionBudget:
+  minAvailable: 1
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - campus-backend
+          topologyKey: kubernetes.io/hostname

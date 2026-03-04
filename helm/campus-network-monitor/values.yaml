@@ -1,0 +1,22 @@
+replicaCount: 2
+
+backend:
+  image:
+    repository: campus-network-monitor-backend
+    tag: latest
+  service:
+    port: 5000
+
+frontend:
+  image:
+    repository: campus-network-monitor-frontend
+    tag: latest
+  service:
+    port: 80
+
+ingress:
+  enabled: false
+  hosts:
+    - host: chart-example.local
+      paths:
+        - /
