@@ -722,7 +722,7 @@ const Dashboard = () => {
                             onClick={() => fetchDeviceLatency(device.id, device.name)}
                             className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm transition-all shadow-lg"
                           >
-                            <Eye size={16} />
+                            <Eye size={16} /> 
                             Details
                           </motion.button>
                           <motion.button
