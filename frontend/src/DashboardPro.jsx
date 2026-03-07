@@ -24,7 +24,7 @@ import 'react-circular-progressbar/dist/styles.css';
 import Particles from 'react-particles';
 import { loadFull } from "tsparticles";
 
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = `${import.meta.env.VITE_API_URL}/api`;
 
 // 3D Animated Sphere Component
 const AnimatedSphere = ({ status }) => {
@@ -545,7 +545,7 @@ const DashboardPro = () => {
       <div className="min-h-screen bg-black text-white flex items-center justify-center p-6">
         <div className="max-w-2xl text-center">
           <h2 className="text-2xl font-bold mb-4">No data received from backend</h2>
-          <p className="text-gray-400 mb-4">The dashboard did not receive data from <code>http://localhost:5000/api/summary</code>. Check the backend, CORS, or open developer tools for errors.</p>
+          <p className="text-gray-400 mb-4">The dashboard did not receive data from <code>${import.meta.env.VITE_API_URL}/api/summary</code>. Check the backend, CORS, or open developer tools for errors.</p>
           <div className="flex justify-center gap-4">
             <button onClick={fetchData} className="px-4 py-2 bg-blue-600 rounded">Retry</button>
             <button onClick={() => console.log('Auth token:', localStorage.getItem('token'))} className="px-4 py-2 bg-gray-700 rounded">Dump Token</button>

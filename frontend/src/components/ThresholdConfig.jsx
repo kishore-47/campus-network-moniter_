@@ -14,7 +14,7 @@ const ThresholdConfig = () => {
 
   const fetchThresholds = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/thresholds', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/thresholds`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -33,7 +33,7 @@ const ThresholdConfig = () => {
 
   const handleUpdate = async (id, warning, critical) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/thresholds/${id}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/thresholds/${id}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
