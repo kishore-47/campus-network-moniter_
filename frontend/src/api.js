@@ -22,6 +22,11 @@ export function api(path) {
   return `${API_BASE_URL}${path}`;
 }
 
+// Always log the computed base URL for debugging; this shows up in the
+// browser console immediately when the app initializes.
+// eslint-disable-next-line no-console
+console.log('Resolved API_BASE_URL:', API_BASE_URL);
+
 // If the variable is missing we log a warning during startup so developers
 // notice the configuration issue early.
 if (!rawBase) {

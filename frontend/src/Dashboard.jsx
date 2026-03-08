@@ -40,9 +40,14 @@ const Dashboard = () => {
 
   const fetchData = async () => {
     try {
+      // log the URLs we are about to call so they appear in the console
+      const sumUrl = api('/summary');
+      const alertUrl = api('/alerts');
+      console.log('fetchData: calling', sumUrl, alertUrl);
+
       const [summaryRes, alertsRes] = await Promise.all([
-        fetch(api('/summary')),
-        fetch(api('/alerts'))
+        fetch(sumUrl),
+        fetch(alertUrl)
       ]);
 
       const summaryData = await summaryRes.json();
@@ -53,7 +58,8 @@ const Dashboard = () => {
       setLoading(false);
     } catch (error) {
       console.error('Error fetching data:', error);
-      showNotification.error('Failed to fetch network data');
+      // show the API_BASE_URL as part of the message to help debugging
+      showNotification.error(`Failed to fetch network data from ${API_BASE_URL}`);
       setLoading(false);
     }
   };

@@ -1,0 +1,13 @@
+{
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/"
+    }
+  ],
+  "env": {
+    // placeholder broken out in docs; actual values should be set via the
+    // Vercel dashboard or CLI `vercel env add` command.  Example:
+    //   VITE_API_URL=https://api.mybackend.com
+  }
+}

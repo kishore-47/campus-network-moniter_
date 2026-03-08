@@ -21,6 +21,12 @@ Campus Network Monitor is a full-stack application for real-time network health 
 3. Start frontend: `cd frontend && npm run dev`
 4. Open http://localhost:3001
 
+> **Deploying to Vercel**
+>
+> - Set the environment variable `VITE_API_URL` in your Vercel project settings so the static site knows where to reach the backend.
+> - Add a `vercel.json` file (included in this repo) with a rewrite rule so client-side routes like `/topology` always serve `index.html`.
+> - Backend services must be hosted separately (e.g. Heroku, AWS, etc.) and accessible from the browser; Vercel only serves the React static assets.
+
 For containerized setup:
 
 ```bash
