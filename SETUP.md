@@ -41,6 +41,14 @@ cd frontend
 # Install dependencies
 npm install
 
+# (important) configure backend URL for the frontend. create a .env file or
+# add to your environment:
+#
+#   VITE_API_URL=http://localhost:5000
+#
+# If you omit this variable the production build will default to calling
+# `/api` on the same host where the frontend is served.
+
 # Start frontend
 npm run dev
 ```
@@ -95,6 +103,13 @@ SLACK_WEBHOOK_URL=https://hooks.slack.com/services/xxx
 - ✅ Email/SMS/Webhook Alerts (when configured)
 
 ## Troubleshooting
+
+### Frontend cannot reach backend
+- Make sure `VITE_API_URL` is set in `frontend/.env` or passed to the build. For production
+  builds you can also configure your reverse proxy so `/api` routes to the Flask service.
+- Open browser developer tools and inspect network requests; look for the value of
+  `apiPath` in the console (a warning is logged when the variable is missing).
+
 
 ### Backend won't start
 - Check Python version: `python --version`

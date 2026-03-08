@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Settings, Save, Plus, Trash2, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../AuthContext';
+import { api } from '../api';
 
 const ThresholdConfig = () => {
   const [thresholds, setThresholds] = useState([]);
@@ -14,7 +15,7 @@ const ThresholdConfig = () => {
 
   const fetchThresholds = async () => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/thresholds`, {
+      const response = await fetch(api('/thresholds'), {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -33,7 +34,7 @@ const ThresholdConfig = () => {
 
   const handleUpdate = async (id, warning, critical) => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/thresholds/${id}`, {
+      const response = await fetch(api(`/thresholds/${id}`), {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Network, Plus, Trash2, RefreshCw } from 'lucide-react';
 import { useAuth } from '../AuthContext';
+import { api } from '../api';
 
 const TopologyViewer = () => {
   const [topology, setTopology] = useState({ nodes: [], edges: [] });
@@ -14,7 +15,7 @@ const TopologyViewer = () => {
 
   const fetchTopology = async () => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/topology`, {
+      const response = await fetch(api('/topology'), {
         headers: {
           'Authorization': `Bearer ${token}`
         }

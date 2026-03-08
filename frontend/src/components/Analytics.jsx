@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { TrendingUp, BarChart3, Download } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useAuth } from '../AuthContext';
+import { api } from '../api';
 
 const Analytics = () => {
   const [trends, setTrends] = useState(null);
@@ -15,7 +16,7 @@ const Analytics = () => {
 
   const fetchTrends = async () => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/analytics/trends?days=${days}`, {
+      const response = await fetch(api(`/analytics/trends?days=${days}`), {
         headers: {
           'Authorization': `Bearer ${token}`
         }

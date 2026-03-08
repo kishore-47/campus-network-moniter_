@@ -15,8 +15,9 @@ import NotificationContainer, { showNotification } from './components/Notificati
 import SearchFilter from './components/SearchFilter';
 import ExportPanel from './components/ExportPanel';
 import HealthScore from './components/HealthScore';
+import { api, API_BASE_URL } from './api';
 
-const API_BASE_URL = `${import.meta.env.VITE_API_URL}/api`;
+// API_BASE_URL is also exported for components that reference it directly
 
 const Dashboard = () => {
   const [summary, setSummary] = useState(null);
@@ -40,8 +41,8 @@ const Dashboard = () => {
   const fetchData = async () => {
     try {
       const [summaryRes, alertsRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/summary`),
-        fetch(`${API_BASE_URL}/alerts`)
+        fetch(api('/summary')),
+        fetch(api('/alerts'))
       ]);
 
       const summaryData = await summaryRes.json();
@@ -59,7 +60,7 @@ const Dashboard = () => {
 
   const fetchDeviceLatency = async (deviceId, deviceName) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/device/${deviceId}/latency?hours=24`);
+      const res = await fetch(api(`/device/${deviceId}/latency?hours=24`));
       const data = await res.json();
       
       const formattedData = data.data.map(entry => ({
