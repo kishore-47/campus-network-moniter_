@@ -50,14 +50,29 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-and-test
     if: github.ref == 'refs/heads/main'
+    outputs:
+      images_published: ${{ steps.gate.outputs.images_published }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Check registry secrets
+        id: gate
+        shell: bash
+        run: |
+          if [ -n "${{ secrets.REGISTRY_URL }}" ] && [ -n "${{ secrets.REGISTRY_USERNAME }}" ] && [ -n "${{ secrets.REGISTRY_PASSWORD }}" ]; then
+            echo "images_published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "images_published=false" >> "$GITHUB_OUTPUT"
+            echo "Registry secrets are missing; skipping docker build/push."
+          fi
+
       - name: Set up Docker Buildx
+        if: steps.gate.outputs.images_published == 'true'
         uses: docker/setup-buildx-action@v2
 
       - name: Login to registry
+        if: steps.gate.outputs.images_published == 'true'
         uses: docker/login-action@v2
         with:
           registry: ${{ secrets.REGISTRY_URL }}
@@ -65,6 +80,7 @@ jobs:
           password: ${{ secrets.REGISTRY_PASSWORD }}
 
       - name: Build and push backend image
+        if: steps.gate.outputs.images_published == 'true'
         uses: docker/build-push-action@v4
         with:
           context: ./backend
@@ -73,6 +89,7 @@ jobs:
             ${{ secrets.REGISTRY_URL }}/campus-network-monitor-backend:latest
 
       - name: Build and push frontend image
+        if: steps.gate.outputs.images_published == 'true'
         uses: docker/build-push-action@v4
         with:
           context: ./frontend
@@ -80,29 +97,52 @@ jobs:
           tags: |
             ${{ secrets.REGISTRY_URL }}/campus-network-monitor-frontend:latest
 
+      - name: Docker build/push summary
+        if: steps.gate.outputs.images_published == 'false'
+        run: echo "Docker build/push skipped because required registry secrets are not configured."
+
   deploy:
     runs-on: ubuntu-latest
     needs: docker-build-push
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && needs.docker-build-push.outputs.images_published == 'true'
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Check deploy secrets
+        id: deploy_gate
+        shell: bash
+        run: |
+          if [ -n "${{ secrets.KUBECONFIG_DATA }}" ] && [ -n "${{ secrets.DEPLOY_ENV }}" ]; then
+            echo "deploy_ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy_ready=false" >> "$GITHUB_OUTPUT"
+            echo "Deployment secrets are missing; skipping deployment."
+          fi
+
       - name: Setup kubectl
+        if: steps.deploy_gate.outputs.deploy_ready == 'true'
         uses: azure/setup-kubectl@v3
         with:
           version: 'latest'
 
       - name: Configure Kubeconfig
+        if: steps.deploy_gate.outputs.deploy_ready == 'true'
         run: |
           echo "${{ secrets.KUBECONFIG_DATA }}" | base64 --decode > $HOME/.kube/config
 
       - name: Install Helm
+        if: steps.deploy_gate.outputs.deploy_ready == 'true'
         uses: azure/setup-helm@v3
 
       - name: Deploy with Helm
+        if: steps.deploy_gate.outputs.deploy_ready == 'true'
         run: |
           helm upgrade --install campus-monitor ./helm/campus-network-monitor \
             -f deploy/${{ secrets.DEPLOY_ENV }}/values.yaml \
             --namespace campus-monitor --create-namespace
+
+      - name: Deploy summary
+        if: steps.deploy_gate.outputs.deploy_ready == 'false'
+        run: echo "Deploy skipped because required deployment secrets are not configured."
