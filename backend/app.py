@@ -16,8 +16,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# analytics module for anomaly detection / predictions
-from analytics import AnalyticsEngine
+# analytics module for anomaly detection / predictions (moved to try-except below)
 
 # Import V3.0 modules
 try:
@@ -145,6 +144,33 @@ def ensure_database_schema():
         )
     ''')
 
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS thresholds (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            device_id INTEGER,
+            metric_type TEXT NOT NULL,
+            warning_threshold REAL,
+            critical_threshold REAL,
+            operator TEXT DEFAULT 'greater_than',
+            enabled BOOLEAN DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (device_id) REFERENCES devices(id)
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS network_links (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_device_id INTEGER NOT NULL,
+            target_device_id INTEGER NOT NULL,
+            link_type TEXT DEFAULT 'physical',
+            bandwidth TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (source_device_id) REFERENCES devices(id),
+            FOREIGN KEY (target_device_id) REFERENCES devices(id)
+        )
+    ''')
+
     # Lightweight migration for older databases that may miss columns.
     def add_column_if_missing(table_name, column_def):
         column_name = column_def.split()[0]
@@ -199,18 +225,40 @@ if AUTH_AVAILABLE:
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     init_users_table()
 
-# Initialize V3.0 components
+# Initialize V3.0 components with error handling
+# Initialize as None first so endpoints don't get NameError if init fails
+snmp_monitor = None
+alerting = None
+threshold_manager = None
+topology_manager = None
+
 if SNMP_AVAILABLE:
-    snmp_monitor = SNMPMonitor(DB_NAME)
+    try:
+        snmp_monitor = SNMPMonitor(DB_NAME)
+    except Exception as e:
+        logger.warning(f"Failed to initialize SNMP monitor: {e}")
+        SNMP_AVAILABLE = False
 
 if ALERTING_AVAILABLE:
-    alerting = AlertingSystem()
+    try:
+        alerting = AlertingSystem()
+    except Exception as e:
+        logger.warning(f"Failed to initialize alerting: {e}")
+        ALERTING_AVAILABLE = False
 
 if THRESHOLDS_AVAILABLE:
-    threshold_manager = ThresholdManager(DB_NAME)
+    try:
+        threshold_manager = ThresholdManager(DB_NAME)
+    except Exception as e:
+        logger.warning(f"Failed to initialize threshold manager: {e}")
+        THRESHOLDS_AVAILABLE = False
 
 if TOPOLOGY_AVAILABLE:
-    topology_manager = NetworkTopology(DB_NAME)
+    try:
+        topology_manager = NetworkTopology(DB_NAME)
+    except Exception as e:
+        logger.warning(f"Failed to initialize topology manager: {e}")
+        TOPOLOGY_AVAILABLE = False
 
 def get_db_connection():
     """Get database connection"""
@@ -602,52 +650,70 @@ if THRESHOLDS_AVAILABLE:
     @auth_required()
     def get_thresholds():
         """Get all thresholds"""
-        device_id = request.args.get('device_id', type=int)
-        thresholds = threshold_manager.get_all_thresholds(device_id)
-        return jsonify(thresholds)
+        if not threshold_manager:
+            return jsonify({'error': 'Threshold manager not available'}), 503
+        try:
+            device_id = request.args.get('device_id', type=int)
+            thresholds = threshold_manager.get_all_thresholds(device_id)
+            return jsonify(thresholds)
+        except Exception as e:
+            logger.exception("Error in get_thresholds: %s", e)
+            return jsonify({'error': str(e)}), 500
     
     @app.route('/api/thresholds/<int:threshold_id>', methods=['PUT'])
     @auth_required()
     def update_threshold(threshold_id):
         """Update threshold values (admin/operator only)"""
-        if AUTH_AVAILABLE:
-            claims = get_jwt()
-            if claims.get('role') not in ['admin', 'operator']:
-                return jsonify({'error': 'Insufficient permissions'}), 403
-        
-        data = request.get_json()
-        threshold_manager.update_threshold(
-            threshold_id,
-            data.get('warning'),
-            data.get('critical')
-        )
-        return jsonify({'message': 'Threshold updated'})
+        if not threshold_manager:
+            return jsonify({'error': 'Threshold manager not available'}), 503
+        try:
+            if AUTH_AVAILABLE:
+                claims = get_jwt()
+                if claims.get('role') not in ['admin', 'operator']:
+                    return jsonify({'error': 'Insufficient permissions'}), 403
+            
+            data = request.get_json()
+            threshold_manager.update_threshold(
+                threshold_id,
+                data.get('warning'),
+                data.get('critical')
+            )
+            return jsonify({'message': 'Threshold updated'})
+        except Exception as e:
+            logger.exception("Error in update_threshold: %s", e)
+            return jsonify({'error': str(e)}), 500
     
     @app.route('/api/thresholds', methods=['POST'])
     @auth_required()
     def create_threshold():
         """Create new threshold (admin/operator only)"""
-        if AUTH_AVAILABLE:
-            claims = get_jwt()
-            if claims.get('role') not in ['admin', 'operator']:
-                return jsonify({'error': 'Insufficient permissions'}), 403
-        
-        data = request.get_json()
-        
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            INSERT INTO thresholds (device_id, metric_type, warning_threshold, critical_threshold, operator, enabled)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (data.get('device_id'), data['metric_type'], data['warning'], data['critical'], 
-              data.get('operator', 'greater_than'), data.get('enabled', 1)))
-        
-        conn.commit()
-        threshold_id = cursor.lastrowid
-        conn.close()
-        
-        return jsonify({'message': 'Threshold created', 'id': threshold_id}), 201
+        if not threshold_manager:
+            return jsonify({'error': 'Threshold manager not available'}), 503
+        try:
+            if AUTH_AVAILABLE:
+                claims = get_jwt()
+                if claims.get('role') not in ['admin', 'operator']:
+                    return jsonify({'error': 'Insufficient permissions'}), 403
+            
+            data = request.get_json()
+            
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                INSERT INTO thresholds (device_id, metric_type, warning_threshold, critical_threshold, operator, enabled)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (data.get('device_id'), data['metric_type'], data['warning'], data['critical'], 
+                  data.get('operator', 'greater_than'), data.get('enabled', 1)))
+            
+            conn.commit()
+            threshold_id = cursor.lastrowid
+            conn.close()
+            
+            return jsonify({'message': 'Threshold created', 'id': threshold_id}), 201
+        except Exception as e:
+            logger.exception("Error in create_threshold: %s", e)
+            return jsonify({'error': str(e)}), 500
 
 # Topology Endpoints
 if TOPOLOGY_AVAILABLE:
@@ -655,44 +721,62 @@ if TOPOLOGY_AVAILABLE:
     @auth_required()
     def get_topology():
         """Get network topology"""
-        topology = topology_manager.get_topology()
-        return jsonify(topology)
+        if not topology_manager:
+            return jsonify({'error': 'Topology manager not available'}), 503
+        try:
+            topology = topology_manager.get_topology()
+            return jsonify(topology)
+        except Exception as e:
+            logger.exception("Error in get_topology: %s", e)
+            return jsonify({'error': str(e)}), 500
     
     @app.route('/api/topology/link', methods=['POST'])
     @auth_required()
     def add_topology_link():
         """Add network link (admin/operator only)"""
-        if AUTH_AVAILABLE:
-            claims = get_jwt()
-            if claims.get('role') not in ['admin', 'operator']:
-                return jsonify({'error': 'Insufficient permissions'}), 403
-        
-        data = request.get_json()
-        topology_manager.add_link(
-            data['source_id'],
-            data['target_id'],
-            data.get('link_type', 'physical'),
-            data.get('bandwidth')
-        )
-        return jsonify({'message': 'Link added'})
+        if not topology_manager:
+            return jsonify({'error': 'Topology manager not available'}), 503
+        try:
+            if AUTH_AVAILABLE:
+                claims = get_jwt()
+                if claims.get('role') not in ['admin', 'operator']:
+                    return jsonify({'error': 'Insufficient permissions'}), 403
+            
+            data = request.get_json()
+            topology_manager.add_link(
+                data['source_id'],
+                data['target_id'],
+                data.get('link_type', 'physical'),
+                data.get('bandwidth')
+            )
+            return jsonify({'message': 'Link added'})
+        except Exception as e:
+            logger.exception("Error in add_topology_link: %s", e)
+            return jsonify({'error': str(e)}), 500
     
     @app.route('/api/topology/link/<int:link_id>', methods=['DELETE'])
     @auth_required()
     def delete_topology_link(link_id):
         """Delete network link (admin only)"""
-        if AUTH_AVAILABLE:
-            claims = get_jwt()
-            if claims.get('role') != 'admin':
-                return jsonify({'error': 'Admin access required'}), 403
-        
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('DELETE FROM network_links WHERE id = ?', (link_id,))
-        conn.commit()
-        conn.close()
-        
-        return jsonify({'message': 'Link deleted'})
+        if not topology_manager:
+            return jsonify({'error': 'Topology manager not available'}), 503
+        try:
+            if AUTH_AVAILABLE:
+                claims = get_jwt()
+                if claims.get('role') != 'admin':
+                    return jsonify({'error': 'Admin access required'}), 403
+            
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute('DELETE FROM network_links WHERE id = ?', (link_id,))
+            conn.commit()
+            conn.close()
+            
+            return jsonify({'message': 'Link deleted'})
+        except Exception as e:
+            logger.exception("Error in delete_topology_link: %s", e)
+            return jsonify({'error': str(e)}), 500
 
 # Alerting Endpoints
 if ALERTING_AVAILABLE:
@@ -923,8 +1007,12 @@ def start_monitor():
     # Start analytics engine if available
     if ANALYTICS_AVAILABLE:
         def analytics_loop():
-            engine = AnalyticsEngine(DB_NAME)
-            engine.sync()
+            try:
+                from analytics import AnalyticsEngine
+                engine = AnalyticsEngine(DB_NAME)
+                engine.sync()
+            except Exception as e:
+                print(f"❌ Analytics engine error: {e}")
         threading.Thread(target=analytics_loop, daemon=True).start()
         print("✅ Analytics engine started")
 
