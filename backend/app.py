@@ -70,6 +70,105 @@ CORS(app)  # Enable CORS for React frontend
 
 DB_NAME = 'network_monitor.db'
 
+
+def ensure_database_schema():
+    """Ensure required SQLite tables/columns exist for API queries."""
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+
+    # Core tables used by API endpoints
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS devices (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            ip_address TEXT NOT NULL,
+            device_type TEXT NOT NULL,
+            location TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS device_status (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            device_id INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (device_id) REFERENCES devices(id)
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS telemetry (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            device_id INTEGER NOT NULL,
+            latency_ms REAL,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (device_id) REFERENCES devices(id)
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS incidents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            device_id INTEGER NOT NULL,
+            severity TEXT NOT NULL,
+            description TEXT NOT NULL,
+            status TEXT DEFAULT 'OPEN',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            resolved_at TIMESTAMP,
+            FOREIGN KEY (device_id) REFERENCES devices(id)
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS anomalies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            device_id INTEGER NOT NULL,
+            metric TEXT NOT NULL,
+            value REAL NOT NULL,
+            detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            description TEXT,
+            FOREIGN KEY (device_id) REFERENCES devices(id)
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS predictions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            device_id INTEGER NOT NULL,
+            metric TEXT NOT NULL,
+            predicted_value REAL NOT NULL,
+            prediction_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            horizon_hours INTEGER,
+            FOREIGN KEY (device_id) REFERENCES devices(id)
+        )
+    ''')
+
+    # Lightweight migration for older databases that may miss columns.
+    def add_column_if_missing(table_name, column_def):
+        column_name = column_def.split()[0]
+        cursor.execute(f"PRAGMA table_info({table_name})")
+        existing = {row[1] for row in cursor.fetchall()}
+        if column_name not in existing:
+            cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_def}")
+
+    add_column_if_missing('devices', 'device_type TEXT DEFAULT "Unknown"')
+    add_column_if_missing('devices', 'location TEXT')
+    add_column_if_missing('devices', 'created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
+    add_column_if_missing('device_status', 'timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
+    add_column_if_missing('telemetry', 'timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
+    add_column_if_missing('incidents', 'status TEXT DEFAULT "OPEN"')
+    add_column_if_missing('incidents', 'created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
+    add_column_if_missing('incidents', 'resolved_at TIMESTAMP')
+
+    conn.commit()
+    conn.close()
+
+
+# Ensure schema exists even when deployment does not run init_db.py explicitly.
+ensure_database_schema()
+
 # JWT Configuration (V3.0)
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'dev-secret-key-change-in-production')
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=8)
@@ -129,77 +228,89 @@ def get_summary():
     Get overall network summary
     Returns: Device counts, uptime percentages, average latency
     """
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    # Get all devices
-    cursor.execute('SELECT COUNT(*) as total FROM devices')
-    total_devices = cursor.fetchone()['total']
-    
-    # Get current status for each device (last status entry)
-    cursor.execute('''
-        SELECT d.id, d.name, d.ip_address, d.device_type, d.location,
-               (SELECT status FROM device_status 
-                WHERE device_id = d.id 
-                ORDER BY timestamp DESC LIMIT 1) as current_status,
-               (SELECT latency_ms FROM telemetry 
-                WHERE device_id = d.id 
-                ORDER BY timestamp DESC LIMIT 1) as latest_latency
-        FROM devices d
-    ''')
-    devices = cursor.fetchall()
-    
-    devices_up = sum(1 for d in devices if d['current_status'] == 'UP')
-    devices_down = total_devices - devices_up
-    
-    # Calculate uptime percentage for each device (last 24 hours)
-    device_details = []
-    for device in devices:
-        device_id = device['id']
-        
-        # Get uptime percentage
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Get all devices
+        cursor.execute('SELECT COUNT(*) as total FROM devices')
+        total_devices = cursor.fetchone()['total']
+
+        # Get current status for each device (last status entry)
         cursor.execute('''
-            SELECT 
-                SUM(CASE WHEN status = 'UP' THEN 1 ELSE 0 END) * 100.0 / COUNT(*) as uptime_percent
-            FROM device_status
-            WHERE device_id = ?
-            AND timestamp > datetime('now', '-24 hours')
-        ''', (device_id,))
-        
-        uptime_result = cursor.fetchone()
-        uptime = uptime_result['uptime_percent'] if uptime_result['uptime_percent'] else 0
-        
-        # Get average latency (last 24 hours)
-        cursor.execute('''
-            SELECT AVG(latency_ms) as avg_latency
-            FROM telemetry
-            WHERE device_id = ?
-            AND timestamp > datetime('now', '-24 hours')
-        ''', (device_id,))
-        
-        latency_result = cursor.fetchone()
-        avg_latency = latency_result['avg_latency'] if latency_result['avg_latency'] else None
-        
-        device_details.append({
-            'id': device['id'],
-            'name': device['name'],
-            'ip_address': device['ip_address'],
-            'device_type': device['device_type'],
-            'location': device['location'],
-            'status': device['current_status'] or 'UNKNOWN',
-            'uptime_percent': round(uptime, 2),
-            'avg_latency_ms': round(avg_latency, 2) if avg_latency else None,
-            'latest_latency_ms': round(device['latest_latency'], 2) if device['latest_latency'] else None
+            SELECT d.id, d.name, d.ip_address, d.device_type, d.location,
+                   (SELECT status FROM device_status
+                    WHERE device_id = d.id
+                    ORDER BY timestamp DESC LIMIT 1) as current_status,
+                   (SELECT latency_ms FROM telemetry
+                    WHERE device_id = d.id
+                    ORDER BY timestamp DESC LIMIT 1) as latest_latency
+            FROM devices d
+        ''')
+        devices = cursor.fetchall()
+
+        devices_up = sum(1 for d in devices if d['current_status'] == 'UP')
+        devices_down = total_devices - devices_up
+
+        # Calculate uptime percentage for each device (last 24 hours)
+        device_details = []
+        for device in devices:
+            device_id = device['id']
+
+            # Get uptime percentage
+            cursor.execute('''
+                SELECT
+                    SUM(CASE WHEN status = 'UP' THEN 1 ELSE 0 END) * 100.0 / COUNT(*) as uptime_percent
+                FROM device_status
+                WHERE device_id = ?
+                AND timestamp > datetime('now', '-24 hours')
+            ''', (device_id,))
+
+            uptime_result = cursor.fetchone()
+            uptime = uptime_result['uptime_percent'] if uptime_result['uptime_percent'] else 0
+
+            # Get average latency (last 24 hours)
+            cursor.execute('''
+                SELECT AVG(latency_ms) as avg_latency
+                FROM telemetry
+                WHERE device_id = ?
+                AND timestamp > datetime('now', '-24 hours')
+            ''', (device_id,))
+
+            latency_result = cursor.fetchone()
+            avg_latency = latency_result['avg_latency'] if latency_result['avg_latency'] else None
+
+            device_details.append({
+                'id': device['id'],
+                'name': device['name'],
+                'ip_address': device['ip_address'],
+                'device_type': device['device_type'],
+                'location': device['location'],
+                'status': device['current_status'] or 'UNKNOWN',
+                'uptime_percent': round(uptime, 2),
+                'avg_latency_ms': round(avg_latency, 2) if avg_latency else None,
+                'latest_latency_ms': round(device['latest_latency'], 2) if device['latest_latency'] else None
+            })
+
+        return jsonify({
+            'total_devices': total_devices,
+            'devices_up': devices_up,
+            'devices_down': devices_down,
+            'devices': device_details
         })
-    
-    conn.close()
-    
-    return jsonify({
-        'total_devices': total_devices,
-        'devices_up': devices_up,
-        'devices_down': devices_down,
-        'devices': device_details
-    })
+    except Exception as e:
+        logger.exception("/api/summary failed: %s", e)
+        return jsonify({
+            'total_devices': 0,
+            'devices_up': 0,
+            'devices_down': 0,
+            'devices': [],
+            'error': 'summary_unavailable'
+        }), 200
+    finally:
+        if conn is not None:
+            conn.close()
 
 @app.route('/api/alerts', methods=['GET'])
 def get_alerts():
@@ -207,30 +318,43 @@ def get_alerts():
     Get alert summary by severity
     Returns: Count of incidents by severity level
     """
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute('''
-        SELECT severity, COUNT(*) as count
-        FROM incidents
-        WHERE status = 'OPEN'
-        GROUP BY severity
-    ''')
-    
-    alerts = cursor.fetchall()
-    conn.close()
-    
-    alert_summary = {
-        'CRITICAL': 0,
-        'HIGH': 0,
-        'MEDIUM': 0,
-        'LOW': 0
-    }
-    
-    for alert in alerts:
-        alert_summary[alert['severity']] = alert['count']
-    
-    return jsonify(alert_summary)
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            SELECT severity, COUNT(*) as count
+            FROM incidents
+            WHERE status = 'OPEN'
+            GROUP BY severity
+        ''')
+
+        alerts = cursor.fetchall()
+
+        alert_summary = {
+            'CRITICAL': 0,
+            'HIGH': 0,
+            'MEDIUM': 0,
+            'LOW': 0
+        }
+
+        for alert in alerts:
+            alert_summary[alert['severity']] = alert['count']
+
+        return jsonify(alert_summary)
+    except Exception as e:
+        logger.exception("/api/alerts failed: %s", e)
+        return jsonify({
+            'CRITICAL': 0,
+            'HIGH': 0,
+            'MEDIUM': 0,
+            'LOW': 0,
+            'error': 'alerts_unavailable'
+        }), 200
+    finally:
+        if conn is not None:
+            conn.close()
 
 @app.route('/api/incidents', methods=['GET'])
 def get_incidents():
