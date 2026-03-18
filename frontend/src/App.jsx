@@ -8,8 +8,9 @@ import ErrorBoundary from './components/ErrorBoundary';
 import TopologyViewer from './components/TopologyViewer';
 import ThresholdConfig from './components/ThresholdConfig';
 import Analytics from './components/Analytics';
+import AdminDevices from './components/AdminDevices';
 import ProtectedRoute from './components/ProtectedRoute';
-import { LogOut, Home, Network, Settings, BarChart3, Sun, Moon } from 'lucide-react';
+import { LogOut, Home, Network, Settings, BarChart3, Sun, Moon, ShieldPlus } from 'lucide-react';
 
 const Navigation = () => {
   const { user, logout } = useAuth();
@@ -38,6 +39,12 @@ const Navigation = () => {
                 <BarChart3 size={18} />
                 Analytics
               </a>
+              {user?.role === 'admin' && (
+                <a href="/admin/devices" className={`${darkMode ? 'text-gray-300 hover:text-white' : 'text-gray-600 hover:text-gray-800'} flex items-center gap-2 px-3 py-2 rounded-md transition-colors`}>
+                  <ShieldPlus size={18} />
+                  Admin Devices
+                </a>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -124,6 +131,14 @@ const AppContent = () => {
               <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900 p-6">
                 <Analytics />
               </div>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/devices"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminDevices />
             </ProtectedRoute>
           }
         />
