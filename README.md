@@ -16,9 +16,9 @@ Campus Network Monitor is a full-stack application for real-time network health 
 
 ## Quickstart
 
-1. Initialize database: `cd backend && python init_db.py`
-2. Start backend: `cd backend && python app.py`
-3. Start frontend: `cd frontend && npm run dev`
+1. Initialize the database: `cd backend && python init_db.py`
+2. Start the backend: `cd backend && python app.py`
+3. Start the frontend: `cd frontend && npm run dev`
 4. Open http://localhost:3001
 
 > **Deploying to Vercel**
@@ -27,7 +27,7 @@ Campus Network Monitor is a full-stack application for real-time network health 
 > - Add a `vercel.json` file (included in this repo) with a rewrite rule so client-side routes like `/topology` always serve `index.html`.
 > - Backend services must be hosted separately (e.g. Heroku, AWS, etc.) and accessible from the browser; Vercel only serves the React static assets.
 
-For containerized setup:
+For a containerized setup:
 
 ```bash
 docker compose up --build
