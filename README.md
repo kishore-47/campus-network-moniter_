@@ -1,6 +1,5 @@
-# Intelligent Campus Network Monitoring and Health Analytics System 
-
 <div align="center">
+# Intelligent Campus Network Monitoring and Health Analytics System 
 
 ![Network Monitor](https://img.shields.io/badge/Network-Monitoring-blue?style=for-the-badge)
 ![Python](https://img.shields.io/badge/Python-3.8+-green?style=for-the-badge&logo=python)
